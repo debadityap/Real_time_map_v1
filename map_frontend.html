@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real-Time GPS Tracker</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        h2 {
+            text-align: center;
+            padding: 10px;
+            margin: 0;
+            background-color: #111;
+            color: #fff;
+        }
+
+        #map {
+            height: 90vh;
+            width: 100%;
+        }
+
+        #info {
+            text-align: center;
+            padding: 8px;
+            font-size: 16px;
+            background-color: #111;
+            color: white;
+        }
+
+        .legend {
+            background: #fff;
+            color: #000;
+            padding: 10px;
+            border-radius: 5px;
+            line-height: 1.5em;
+            font-size: 14px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        }
+
+        .legend i {
+            width: 12px;
+            height: 12px;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .leaflet-top.leaflet-right {
+            margin-top: 70px;
+        }
+
+        .theme-switch {
+            background-color: white;
+            border: none;
+            padding: 6px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            box-shadow: 1px 1px 5px rgba(0,0,0,0.3);
+        }
+
+        .dark-mode .legend,
+        .dark-mode #info,
+        .dark-mode h2 {
+            background-color: #111;
+            color: white;
+        }
+    </style>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+    <h2>🛰️ Rescue Tracker Map</h2>
+    <div id="map"></div>
+    <div id="info">📍 Distance Traveled: 0 km</div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        let currentTheme = 'light';
+
+        const map = L.map('map').setView([22.474951, 88.353603], 15);
+
+        const lightTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        });
+
+        const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap & CartoDB',
+            subdomains: 'abcd',
+            maxZoom: 19
+        });
+
+        lightTiles.addTo(map); // default
+
+        const markerLayer = L.layerGroup().addTo(map);
+        let polyline = null;
+
+        // Legend
+        const legend = L.control({ position: "bottomleft" });
+        legend.onAdd = function () {
+            const div = L.DomUtil.create("div", "legend");
+            div.innerHTML = `
+                <strong>Legend</strong><br>
+                <div><i style="background:red"></i> Trapped Survivor</div>
+                <div><i style="background:green"></i> Area Clear</div>
+                <div><i style="background:blue"></i> 🏥 Hospital</div>
+                <div><i style="background:navy"></i> 🚓 Police Station</div>
+                <div><i style="background:orange"></i> 🚒 Fire Brigade</div>
+                <div><i style="background:cyan"></i> 🌊 Water Body</div>
+            `;
+            return div;
+        };
+        legend.addTo(map);
+
+        // Theme switch button
+        const switchControl = L.control({ position: "topright" });
+        switchControl.onAdd = function () {
+            const btn = L.DomUtil.create("button", "theme-switch");
+            btn.innerHTML = "🌙 Switch Theme";
+            btn.onclick = function () {
+                if (currentTheme === 'light') {
+                    map.removeLayer(lightTiles);
+                    darkTiles.addTo(map);
+                    document.body.classList.add('dark-mode');
+                    currentTheme = 'dark';
+                } else {
+                    map.removeLayer(darkTiles);
+                    lightTiles.addTo(map);
+                    document.body.classList.remove('dark-mode');
+                    currentTheme = 'light';
+                }
+            };
+            return btn;
+        };
+        switchControl.addTo(map);
+
+        // Dynamic map data update
+        async function updateMap() {
+            const res = await fetch('/data');
+            const json = await res.json();
+            const points = json.points;
+            const distance = json.distance;
+
+            markerLayer.clearLayers();
+
+            if (points.length > 0) {
+                points.forEach(([lat, lng], index) => {
+                    const isSurvivor = index % 5 === 0;
+                    const marker = L.circleMarker([lat, lng], {
+                        radius: 8,
+                        color: isSurvivor ? 'red' : 'green',
+                        fillColor: isSurvivor ? 'red' : 'green',
+                        fillOpacity: 0.9
+                    }).addTo(markerLayer);
+
+                    marker.bindPopup(`Point ${index + 1}<br>${isSurvivor ? "🆘 Survivor Found" : "✅ Area Clear"}`);
+                });
+
+                if (polyline) map.removeLayer(polyline);
+                polyline = L.polyline(points, { color: 'aqua', weight: 3 }).addTo(map);
+                map.setView(points[points.length - 1], 16);
+            }
+
+            document.getElementById('info').innerText = `📍 Distance Traveled: ${distance} km`;
+        }
+
+        updateMap();
+        setInterval(updateMap, 5000);
+    </script>
+</body>
+</html>
