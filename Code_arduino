@@ -1,0 +1,68 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+
+// GPS object and UART
+TinyGPSPlus gps;
+HardwareSerial GPSserial(1); // Use UART1 (RX=4, TX=15)
+
+// Replace with your WiFi credentials
+const char* ssid = "Your_SSID";
+const char* password = "Your_password";
+
+// Create server on port 80
+WebServer server(80);
+
+// To hold the latest GPS coordinates
+String latestLatitude = "N/A";
+String latestLongitude = "N/A";
+
+// Handle root path
+void handleRoot() {
+  String message = "Latitude: " + latestLatitude + "\nLongitude: " + latestLongitude;
+  server.send(200, "text/plain", message);
+}
+
+void setup() {
+  Serial.begin(115200);
+  GPSserial.begin(9600, SERIAL_8N1, 4, 15);  // GPS RX=4, TX=15
+
+  // Connect to WiFi network
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.print("Connected! ESP IP address: ");
+  Serial.println(WiFi.localIP());
+
+  // Start HTTP server
+  server.on("/", handleRoot);
+  server.begin();
+  Serial.println("HTTP server started");
+}
+
+void loop() {
+  // Read from GPS
+  while (GPSserial.available()) {
+    gps.encode(GPSserial.read());
+  }
+
+  // Update coordinates if new data is available
+  if (gps.location.isUpdated()) {
+    latestLatitude = String(gps.location.lat(), 6);
+    latestLongitude = String(gps.location.lng(), 6);
+
+    Serial.println("Latitude: " + latestLatitude);
+    Serial.println("Longitude: " + latestLongitude);
+  }
+
+  // Handle web requests
+  server.handleClient();
+}
